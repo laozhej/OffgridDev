@@ -401,7 +401,10 @@ NON_TOOL_MODEL_NAMES=("DeepSeek Coder 1.3B" "DeepSeek Coder 6.7B" "DeepSeek Code
 
 configure_webui_models() {
   local -a curl_options=(--silent --connect-timeout 2 --max-time 5)
-  local signin_response webui_token model_id model_name model_payload http_code i
+  local signin_response webui_token model_id model_name model_payload create_response http_code i
+  local duplicate_response='^[[:space:]]*\{[[:space:]]*"detail"[[:space:]]*:[[:space:]]*'
+  duplicate_response+='"Uh-oh! This model id is already registered\. Please choose another model id string\."'
+  duplicate_response+='[[:space:]]*\}[[:space:]]*$'
   signin_response="$(curl "${curl_options[@]}" --fail -X POST http://localhost:3000/api/v1/auths/signin \
     -H "Content-Type: application/json" -d '{"email":"admin@localhost","password":""}')" || return 1
   webui_token="$(printf '%s\n' "$signin_response" | sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
@@ -411,18 +414,21 @@ configure_webui_models() {
     model_id="${NON_TOOL_MODEL_IDS[$i]}"
     model_name="${NON_TOOL_MODEL_NAMES[$i]}"
     model_payload="{\"id\":\"${model_id}\",\"base_model_id\":\"${model_id}\",\"name\":\"${model_name}\",\"meta\":{},\"params\":{\"function_calling\":\"legacy\"},\"is_active\":true}"
-    http_code="$(curl "${curl_options[@]}" -o /dev/null -w '%{http_code}' -X POST http://localhost:3000/api/v1/models/create \
+    create_response="$(curl "${curl_options[@]}" -w '\n%{http_code}' -X POST http://localhost:3000/api/v1/models/create \
       -H "Content-Type: application/json" -H "Authorization: Bearer $webui_token" -d "$model_payload")" || return 1
+    http_code="${create_response##*$'\n'}"
     case "$http_code" in
       2??) continue ;;
-      400|409)
-        # Existing models may need an update instead of a create.
-        http_code="$(curl "${curl_options[@]}" -o /dev/null -w '%{http_code}' -X POST http://localhost:3000/api/v1/models/model/update \
-          -H "Content-Type: application/json" -H "Authorization: Bearer $webui_token" -d "$model_payload")" || return 1
-        [[ "$http_code" == 2?? ]] || return 1
+      400|409) ;;
+      401)
+        # Open WebUI also uses 401 for duplicate IDs. Require the duplicate detail before updating.
+        [[ "${create_response%$'\n'*}" =~ $duplicate_response ]] || return 1
         ;;
       *) return 1 ;;
     esac
+    http_code="$(curl "${curl_options[@]}" -o /dev/null -w '%{http_code}' -X POST http://localhost:3000/api/v1/models/model/update \
+      -H "Content-Type: application/json" -H "Authorization: Bearer $webui_token" -d "$model_payload")" || return 1
+    [[ "$http_code" == 2?? ]] || return 1
   done
 }
 
