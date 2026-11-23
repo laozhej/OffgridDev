@@ -36,6 +36,26 @@ Write-Host "=== OffgridDev ==="
 Write-Host "Root: $Root"
 Write-Host ""
 
+# Match the Bash launcher's model settings before starting Docker.
+$SettingPattern = '^[ \t]*(ENABLE_[A-Z0-9_]+)=([01])([ \t]+#.*)?[ \t]*$'
+$CommentOrBlank = '^[ \t]*(#|$)'
+try {
+    $LineNumber = 0
+    foreach ($Line in (Get-Content -LiteralPath $Config -Encoding UTF8)) {
+        $LineNumber++
+        if ($Line -match $CommentOrBlank) {
+            continue
+        }
+        if ($Line -cnotmatch $SettingPattern) {
+            throw "Invalid model setting at ${Config}:${LineNumber}. Use ENABLE_NAME=0 or ENABLE_NAME=1."
+        }
+        Set-Variable -Name $Matches[1] -Value $Matches[2]
+    }
+} catch {
+    [Console]::Error.WriteLine($_.Exception.Message)
+    exit 1
+}
+
 # Tracks how the script left the try block below, so the `finally` handler can tell a
 # normal finish or a deliberate Fail() apart from a Ctrl+C / unexpected interruption and
 # only print an extra "Interrupted" message for the latter.
@@ -205,20 +225,6 @@ Write-Host ""
 
 New-Item -ItemType Directory -Force (Join-Path $Root "data\ollama") | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $Root "data\open-webui") | Out-Null
-
-# --------------------------------------------------
-# Load config
-# --------------------------------------------------
-
-if (-not (Test-Path $Config)) {
-    Fail "Missing config\models.env"
-}
-
-Get-Content $Config | ForEach-Object {
-    if ($_ -match "^(ENABLE_\w+)=(\d)") {
-        Set-Variable -Name $matches[1] -Value $matches[2]
-    }
-}
 
 # --------------------------------------------------
 # Enforce sane model selection by VRAM

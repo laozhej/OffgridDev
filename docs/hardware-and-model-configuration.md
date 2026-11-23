@@ -104,8 +104,9 @@ ENABLE_QWEN25_CODER_32B=0
 ```
 
 Use `ENABLE_NAME=0` or `ENABLE_NAME=1` for each setting. Blank lines and `#` comments
-are allowed. Separate an inline comment from the value with a space. Both Unix (LF)
-and Windows (CRLF) line endings work.
+are allowed, as are leading spaces and tabs. Separate an inline comment from the
+value with a space or tab. Both Unix (LF) and Windows (CRLF) line endings work.
+Both launchers report an invalid setting with its line number before starting Docker.
 
 Supported families:
 - **Coding:** Qwen 2.5 Coder (0.5B–32B), Qwen3 Coder (30B, MoE), DeepSeek Coder, Devstral (24B)
